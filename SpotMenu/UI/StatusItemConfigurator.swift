@@ -22,6 +22,7 @@ final class StatusItemConfigurator {
 
         if let button = statusItem.button {
             button.image = NSImage()
+            button.setAccessibilityLabel("SpotMenu")
             button.addSubview(hostingView)
             NSLayoutConstraint.activate([
                 hostingView.centerXAnchor.constraint(

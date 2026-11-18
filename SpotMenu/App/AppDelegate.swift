@@ -29,7 +29,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Handle right-click menu
         NSEvent.addLocalMonitorForEvents(matching: [.rightMouseUp]) {
             [weak self] event in
-            self?.handleRightClick(event: event)
+            guard let self, self.handleRightClick(event: event) else {
+                return event
+            }
             return nil
         }
 
@@ -47,7 +49,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             model: playbackModel,
             preferences: playbackAppearancePreferencesModel,
             musicPlayerPreferencesModel: musicPlayerPreferencesModel
-        )
+        ) { [weak self] in
+            self?.preferencesAction()
+        }
         popoverManager = PopoverManager(contentView: playbackView)
 
         // Global event monitor to dismiss popover
@@ -168,17 +172,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popoverManager.toggle(relativeTo: statusItem.button)
     }
 
-    private func handleRightClick(event: NSEvent) {
+    private func handleRightClick(event: NSEvent) -> Bool {
         guard let button = statusItem.button,
-            button.frame.contains(
+            let buttonWindow = button.window,
+            event.window === buttonWindow,
+            button.bounds.contains(
                 button.convert(event.locationInWindow, from: nil)
             )
-        else { return }
+        else { return false }
 
         popoverManager.dismiss()
         statusItem.menu = MenuBuilder.build(delegate: self)
         button.performClick(nil)
         statusItem.menu = nil
+        return true
     }
 
     @objc func refreshAction() {
@@ -186,6 +193,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func preferencesAction() {
+        popoverManager.dismiss()
+
         if preferencesWindow == nil {
             let hostingController = NSHostingController(
                 rootView: PreferencesView(
@@ -226,9 +235,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             preferencesWindow = window
         }
 
-        preferencesWindow?.makeKeyAndOrderFront(nil)
-        preferencesWindow?.makeMain()
         NSApp.activate(ignoringOtherApps: true)
+        preferencesWindow?.deminiaturize(nil)
+        preferencesWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc func quitApp() {

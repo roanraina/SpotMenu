@@ -1,6 +1,11 @@
 import Foundation
 import SwiftUI
 
+enum SpotifyPlaybackMode: String {
+    case shuffle = "shuffling"
+    case repeatPlayback = "repeating"
+}
+
 class SpotifyController: MusicPlayerController {
     private var lastTrackID: String?
     private var lastTrackType: String?
@@ -27,7 +32,17 @@ class SpotifyController: MusicPlayerController {
                         set currentSec to player position
                         set isPlayingState to (player state is playing)
                         set trackId to id of current track
-                        return trackName & "|||SEP|||" & artistName & "|||SEP|||" & artworkUrl & "|||SEP|||" & durationSec & "|||SEP|||" & currentSec & "|||SEP|||" & isPlayingState & "|||SEP|||" & trackId & "|||SEP|||" & albumName
+                        set shuffleState to ""
+                        set repeatState to ""
+                        if \(preferences.showShuffleAndRepeat) then
+                            try
+                                set shuffleState to (shuffling as text)
+                            end try
+                            try
+                                set repeatState to (repeating as text)
+                            end try
+                        end if
+                        return trackName & "|||SEP|||" & artistName & "|||SEP|||" & artworkUrl & "|||SEP|||" & durationSec & "|||SEP|||" & currentSec & "|||SEP|||" & isPlayingState & "|||SEP|||" & trackId & "|||SEP|||" & albumName & "|||SEP|||" & shuffleState & "|||SEP|||" & repeatState
                     else
                         return "NOT_RUNNING"
                     end if
@@ -40,7 +55,7 @@ class SpotifyController: MusicPlayerController {
         }
 
         let parts = output.components(separatedBy: "|||SEP|||")
-        guard parts.count == 8 else { return nil }
+        guard parts.count == 10 else { return nil }
 
         let title = parts[0]
         let artist = parts[1]
@@ -118,8 +133,23 @@ class SpotifyController: MusicPlayerController {
             currentTime: min(currentTime, totalTime),
             image: nil,
             isLiked: isLikedResult,
-            longFormInfo: longFormInfo
+            longFormInfo: longFormInfo,
+            isShuffling: Bool(parts[8]),
+            isRepeating: Bool(parts[9])
         )
+    }
+
+    func togglePlaybackMode(_ mode: SpotifyPlaybackMode) -> Bool? {
+        let property = mode.rawValue
+        let script = """
+            tell application "Spotify"
+                if it is running then
+                    set \(property) to (not \(property))
+                    return \(property) as text
+                end if
+            end tell
+            """
+        return runAppleScript(script).flatMap { Bool($0) }
     }
 
     func togglePlayPause() {

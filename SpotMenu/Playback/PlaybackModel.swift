@@ -66,6 +66,8 @@ struct PlaybackInfo {
     let image: Image?
     let isLiked: Bool?
     let longFormInfo: LongFormInfo?
+    var isShuffling: Bool? = nil
+    var isRepeating: Bool? = nil
 }
 
 protocol MusicPlayerController {
@@ -91,6 +93,8 @@ class PlaybackModel: ObservableObject {
     @Published var playerType: PlayerType
     @Published var isLiked: Bool? = nil
     @Published var longFormInfo: LongFormInfo? = nil
+    @Published private(set) var isShuffling: Bool?
+    @Published private(set) var isRepeating: Bool?
 
     private let preferences: MusicPlayerPreferencesModel
     private var controller: MusicPlayerController
@@ -199,6 +203,8 @@ class PlaybackModel: ObservableObject {
             self.image = info.image
             self.isLiked = info.isLiked
             self.longFormInfo = info.longFormInfo
+            self.isShuffling = info.isShuffling
+            self.isRepeating = info.isRepeating
 
             NotificationCenter.default.post(
                 name: .contentModelDidUpdate,
@@ -228,6 +234,18 @@ class PlaybackModel: ObservableObject {
     func skipBack() {
         controller.skipBack()
         delayedFetch()
+    }
+
+    func toggleSpotifyPlaybackMode(_ mode: SpotifyPlaybackMode) {
+        guard preferences.showShuffleAndRepeat,
+            let spotify = controller as? SpotifyController,
+            let isEnabled = spotify.togglePlaybackMode(mode)
+        else { return }
+
+        switch mode {
+        case .shuffle: isShuffling = isEnabled
+        case .repeatPlayback: isRepeating = isEnabled
+        }
     }
 
     func toggleLiked() {
@@ -297,6 +315,8 @@ class PlaybackModel: ObservableObject {
             self.totalTime = 1
             self.image = nil
             self.longFormInfo = nil
+            self.isShuffling = nil
+            self.isRepeating = nil
         }
     }
 

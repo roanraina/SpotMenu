@@ -5,6 +5,7 @@ struct PlaybackView: View {
     @ObservedObject var model: PlaybackModel
     @ObservedObject var preferences: PlaybackAppearancePreferencesModel
     @ObservedObject var musicPlayerPreferencesModel: MusicPlayerPreferencesModel
+    var openSettings: (() -> Void)? = nil
     @State private var isHovering = false
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -74,11 +75,16 @@ struct PlaybackView: View {
 
         if isHovering {
             controlsOverlay
+                .frame(width: 300, height: 300)
         }
     }
 
     private var controlsOverlay: some View {
-        VStack(spacing: 0) {
+        let showPlaybackModes = model.playerType == .spotify
+            && musicPlayerPreferencesModel.showShuffleAndRepeat
+        let transportPadding: CGFloat = showPlaybackModes ? 7 : 30
+
+        return VStack(spacing: 0) {
             HStack {
                 Button(action: model.openMusicApp) {
                     Image(model.playerIconName)
@@ -92,20 +98,18 @@ struct PlaybackView: View {
 
                 Spacer()
 
-                Button(action: {
-                    NSApp.sendAction(
-                        #selector(AppDelegate.preferencesAction),
-                        to: nil,
-                        from: nil
-                    )
-                }) {
-                    Image(systemName: "gearshape.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundColor(preferences.foregroundColor.color)
-                        .frame(width: 20, height: 20)
+                if let openSettings {
+                    Button(action: openSettings) {
+                        Image(systemName: "gearshape.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundColor(preferences.foregroundColor.color)
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Settings")
+                    .help("Open Settings")
                 }
-                .buttonStyle(.plain)
             }
             .padding([.top, .leading, .trailing], 16)
             .padding(.bottom, 24)
@@ -118,23 +122,46 @@ struct PlaybackView: View {
                     .padding(.horizontal)
 
                 HStack(spacing: 10) {
+                    if showPlaybackModes {
+                        playbackModeButton(
+                            "Shuffle",
+                            symbol: "shuffle",
+                            isOn: model.isShuffling,
+                            mode: .shuffle
+                        )
+                    }
+
                     tappableIconButton(
                         imageName: "backward.fill",
-                        imageSize: 30
+                        imageSize: 30,
+                        horizontalPadding: transportPadding
                     ) {
                         model.skipBack()
                     }
 
                     tappableIconButton(
                         imageName: model.isPlaying ? "pause.fill" : "play.fill",
-                        imageSize: 40
+                        imageSize: 40,
+                        horizontalPadding: transportPadding
                     ) {
                         model.togglePlayPause()
                     }
 
-                    tappableIconButton(imageName: "forward.fill", imageSize: 30)
-                    {
+                    tappableIconButton(
+                        imageName: "forward.fill",
+                        imageSize: 30,
+                        horizontalPadding: transportPadding
+                    ) {
                         model.skipForward()
+                    }
+
+                    if showPlaybackModes {
+                        playbackModeButton(
+                            "Repeat",
+                            symbol: "repeat",
+                            isOn: model.isRepeating,
+                            mode: .repeatPlayback
+                        )
                     }
                 }
                 .foregroundColor(preferences.foregroundColor.color)
@@ -229,6 +256,36 @@ struct PlaybackView: View {
         .transition(.opacity)
     }
 
+    private func playbackModeButton(
+        _ title: String,
+        symbol: String,
+        isOn: Bool?,
+        mode: SpotifyPlaybackMode
+    ) -> some View {
+        let isActive = isOn == true
+        return Button {
+            model.toggleSpotifyPlaybackMode(mode)
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .semibold))
+                Circle()
+                    .fill(
+                        isActive ? preferences.foregroundColor.color : .clear
+                    )
+                    .frame(width: 4, height: 4)
+            }
+            .frame(width: 32, height: 40)
+            .contentShape(Rectangle())
+            .opacity(isActive ? 1 : 0.65)
+        }
+        .buttonStyle(.plain)
+        .disabled(isOn == nil)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn.map { $0 ? "On" : "Off" } ?? "Unavailable")
+    }
+
     func formatTime(_ seconds: Double, styleMatching total: Double) -> String {
         let s = Int(seconds)
         let t = Int(total)
@@ -267,6 +324,7 @@ struct PlaybackView: View {
 func tappableIconButton(
     imageName: String,
     imageSize: CGFloat,
+    horizontalPadding: CGFloat,
     action: @escaping () -> Void
 ) -> some View {
     Button(action: action) {
@@ -274,7 +332,8 @@ func tappableIconButton(
             .resizable()
             .scaledToFit()
             .frame(width: imageSize, height: imageSize)
-            .padding(30)
+            .padding(.vertical, 30)
+            .padding(.horizontal, horizontalPadding)
             .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

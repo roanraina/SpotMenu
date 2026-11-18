@@ -33,6 +33,13 @@ struct MusicPlayerPreferencesView: View {
 
                 if playbackModel.isLikingImplemented {
                     Form {
+                        Section("Spotify Playback") {
+                            Toggle(
+                                "Show Shuffle and Repeat",
+                                isOn: $model.showShuffleAndRepeat
+                            )
+                        }
+
                         Section {
                             Toggle("Enable Track Liking", isOn: $model.likingEnabled)
                                 .onChange(of: model.likingEnabled) { newValue in

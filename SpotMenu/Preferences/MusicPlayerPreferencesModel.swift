@@ -29,6 +29,15 @@ class MusicPlayerPreferencesModel: ObservableObject {
         }
     }
 
+    @Published var showShuffleAndRepeat: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                showShuffleAndRepeat,
+                forKey: "spotify.showShuffleAndRepeat"
+            )
+        }
+    }
+
     @Published var longFormTitleStyle: LongFormTitleStyle {
         didSet {
             UserDefaults.standard.set(
@@ -55,6 +64,8 @@ class MusicPlayerPreferencesModel: ObservableObject {
             defaults.object(forKey: "musicPlayer.likingEnabled") as? Bool ?? true
 
         spotifyClientID = defaults.string(forKey: "spotify.clientID")
+        showShuffleAndRepeat =
+            defaults.object(forKey: "spotify.showShuffleAndRepeat") as? Bool ?? true
 
         if let storedRaw = defaults.string(
             forKey: "spotify.longFormTitleStyle"

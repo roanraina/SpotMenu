@@ -27,6 +27,9 @@ final class MenuBuilder {
             )
         )
 
+        for item in menu.items where !item.isSeparatorItem {
+            item.target = delegate
+        }
         return menu
     }
 }
