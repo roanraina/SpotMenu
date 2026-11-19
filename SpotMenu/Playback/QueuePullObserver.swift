@@ -4,8 +4,11 @@ import SwiftUI
 struct QueuePullGesture {
     private var distance: CGFloat = 0
     private var refreshed = false
+    private var lastWheelEvent: TimeInterval?
 
-    mutating func shouldRefresh(delta: CGFloat, phase: NSEvent.Phase, atBottom: Bool) -> Bool {
+    mutating func shouldRefresh(
+        delta: CGFloat, phase: NSEvent.Phase, atTop: Bool, timestamp: TimeInterval
+    ) -> Bool {
         if phase.contains(.began) {
             self = Self()
         }
@@ -13,15 +16,21 @@ struct QueuePullGesture {
             self = Self()
             return false
         }
-        guard !refreshed, phase.contains(.began) || phase.contains(.changed) else {
+        if phase.isEmpty {
+            if lastWheelEvent.map({ timestamp - $0 > 0.25 }) != false {
+                self = Self()
+            }
+            lastWheelEvent = timestamp
+        }
+        guard !refreshed, phase.isEmpty || phase.contains(.began) || phase.contains(.changed) else {
             return false
         }
-        guard atBottom, delta < 0 else {
+        guard atTop, delta > 0 else {
             distance = 0
             return false
         }
 
-        distance -= delta
+        distance += delta
         guard distance >= 48 else { return false }
         refreshed = true
         return true
@@ -29,7 +38,7 @@ struct QueuePullGesture {
 }
 
 struct QueuePullObserver: NSViewRepresentable {
-    let atBottom: Bool
+    let atTop: Bool
     let refresh: () -> Void
 
     func makeNSView(context: Context) -> Observer {
@@ -37,12 +46,12 @@ struct QueuePullObserver: NSViewRepresentable {
     }
 
     func updateNSView(_ view: Observer, context: Context) {
-        view.atBottom = atBottom
+        view.atTop = atTop
         view.refresh = refresh
     }
 
     final class Observer: NSView {
-        var atBottom = false
+        var atTop = false
         var refresh: (() -> Void)?
         private var monitor: Any?
         private var gesture = QueuePullGesture()
@@ -70,12 +79,17 @@ struct QueuePullObserver: NSViewRepresentable {
         }
 
         private func observe(_ event: NSEvent) {
-            guard let window, event.window === window,
-                event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty,
-                bounds.contains(convert(event.locationInWindow, from: nil))
+            guard let window, window.isVisible, event.momentumPhase.isEmpty,
+                event.window == nil || event.window === window
             else { return }
 
-            if gesture.shouldRefresh(delta: event.scrollingDeltaY, phase: event.phase, atBottom: atBottom) {
+            let location = event.window == nil
+                ? window.convertPoint(fromScreen: NSEvent.mouseLocation) : event.locationInWindow
+            guard bounds.contains(convert(location, from: nil)) else { return }
+            let delta = event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 1 : 12)
+            if gesture.shouldRefresh(
+                delta: delta, phase: event.phase, atTop: atTop, timestamp: event.timestamp
+            ) {
                 refresh?()
             }
         }

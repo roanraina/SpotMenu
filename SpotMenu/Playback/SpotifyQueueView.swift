@@ -8,12 +8,12 @@ struct SpotifyQueueView: View {
     @State private var state = LoadState.loading
     @State private var isLoading = true
     @State private var refreshCount = 0
-    @State private var contentBottom: CGFloat = .infinity
+    @State private var contentTop: CGFloat = -.infinity
 
     private static let scrollSpace = "SpotifyQueueViewport"
 
-    private struct QueueBottom: PreferenceKey {
-        static let defaultValue: CGFloat = .infinity
+    private struct QueueTop: PreferenceKey {
+        static let defaultValue: CGFloat = -.infinity
 
         static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
             value = nextValue()
@@ -34,28 +34,14 @@ struct SpotifyQueueView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .frame(width: 26, height: 26)
+                if isLoading {
+                    ProgressView().controlSize(.small)
+                    Text("Refreshing queue…").font(.headline)
+                } else {
+                    Text("Up Next").font(.headline)
                 }
-                .accessibilityLabel("Close queue")
-                .help("Close queue")
-
-                Spacer()
-                Text("Up Next").font(.headline)
-                Spacer()
-
-                ZStack {
-                    if isLoading {
-                        ProgressView().controlSize(.small)
-                            .accessibilityLabel("Refreshing queue")
-                    }
-                }
-                .frame(width: 26, height: 26)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 46)
 
             Divider()
             GeometryReader { viewport in
@@ -68,17 +54,17 @@ struct SpotifyQueueView: View {
                         .background {
                             GeometryReader { content in
                                 Color.clear.preference(
-                                    key: QueueBottom.self,
-                                    value: content.frame(in: .named(Self.scrollSpace)).maxY
+                                    key: QueueTop.self,
+                                    value: content.frame(in: .named(Self.scrollSpace)).minY
                                 )
                             }
                         }
                 }
                 .coordinateSpace(name: Self.scrollSpace)
-                .onPreferenceChange(QueueBottom.self) { contentBottom = $0 }
+                .onPreferenceChange(QueueTop.self) { contentTop = $0 }
                 .background {
                     QueuePullObserver(
-                        atBottom: contentBottom <= viewport.size.height + 2,
+                        atTop: contentTop >= -2,
                         refresh: requestRefresh
                     )
                 }
@@ -87,6 +73,7 @@ struct SpotifyQueueView: View {
         .frame(width: 300, height: 300)
         .background(.regularMaterial)
         .accessibilityAction(named: Text("Refresh queue"), requestRefresh)
+        .onExitCommand(perform: close)
         .task(id: Refresh(trackURI: playback.spotifyTrackURI, count: refreshCount)) {
             await load()
         }
@@ -103,8 +90,7 @@ struct SpotifyQueueView: View {
     @ViewBuilder private var queueContent: some View {
         switch state {
         case .loading:
-            ProgressView("Loading queue…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Color.clear
         case .loaded(let items) where items.isEmpty:
             message("No upcoming tracks or episodes.")
         case .loaded(let items):
@@ -156,16 +142,20 @@ struct SpotifyQueueView: View {
 
     @MainActor private func load() async {
         isLoading = true
-        defer {
-            if !Task.isCancelled { isLoading = false }
-        }
+        let started = ProcessInfo.processInfo.systemUptime
+        let result: LoadState
         do {
             let items = try await SpotifyQueue.load()
-            guard !Task.isCancelled else { return }
-            state = .loaded(items)
+            result = .loaded(items)
         } catch {
-            guard !Task.isCancelled else { return }
-            state = .failed(error as? SpotifyQueue.LoadError, message: error.localizedDescription)
+            result = .failed(error as? SpotifyQueue.LoadError, message: error.localizedDescription)
         }
+        let remaining = 0.8 - (ProcessInfo.processInfo.systemUptime - started)
+        if remaining > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+        }
+        guard !Task.isCancelled else { return }
+        state = result
+        isLoading = false
     }
 }
