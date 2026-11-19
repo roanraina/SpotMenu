@@ -1,0 +1,131 @@
+import SwiftUI
+
+struct SpotifyQueueView: View {
+    let trackURI: String?
+    let close: () -> Void
+    let connect: () -> Void
+
+    @State private var state = LoadState.loading
+    @State private var refreshCount = 0
+
+    private enum LoadState {
+        case loading
+        case loaded([SpotifyQueue.Item])
+        case failed(SpotifyQueue.LoadError)
+    }
+
+    private struct Refresh: Equatable {
+        let trackURI: String?
+        let count: Int
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: close) {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 26, height: 26)
+                }
+                .accessibilityLabel("Back to playback")
+                .help("Back to playback")
+
+                Spacer()
+                Text("Up Next").font(.headline)
+                Spacer()
+
+                Button {
+                    refreshCount += 1
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(width: 26, height: 26)
+                }
+                .disabled(isLoading)
+                .accessibilityLabel("Refresh queue")
+                .help("Refresh queue")
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+
+            Divider()
+            queueContent
+        }
+        .frame(width: 300, height: 300)
+        .background(.regularMaterial)
+        .task(id: Refresh(trackURI: trackURI, count: refreshCount)) {
+            await load()
+        }
+    }
+
+    private var isLoading: Bool {
+        if case .loading = state { return true }
+        return false
+    }
+
+    @ViewBuilder private var queueContent: some View {
+        switch state {
+        case .loading:
+            ProgressView("Loading queue…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .loaded(let items) where items.isEmpty:
+            message("No upcoming tracks or episodes.")
+        case .loaded(let items):
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(items.indices, id: \.self) { index in
+                        let item = items[index]
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name).lineLimit(1)
+                            if let subtitle = item.subtitle, !subtitle.isEmpty {
+                                Text(subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 7)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        case .failed(.signInRequired):
+            message("Connect Spotify to see your queue.", button: "Connect Spotify")
+        case .failed(.accessDenied):
+            message(
+                "Spotify denied queue access. Reconnect to grant permission.",
+                button: "Reconnect Spotify"
+            )
+        case .failed(.rateLimited):
+            message("Spotify is limiting requests. Try refreshing in a moment.")
+        case .failed(.unavailable):
+            message("Couldn't load the queue. Try refreshing.")
+        }
+    }
+
+    private func message(_ text: String, button: String? = nil) -> some View {
+        VStack(spacing: 12) {
+            Text(text)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if let button {
+                Button(button, action: connect)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @MainActor private func load() async {
+        state = .loading
+        do {
+            let items = try await SpotifyQueue.load()
+            guard !Task.isCancelled else { return }
+            state = .loaded(items)
+        } catch {
+            guard !Task.isCancelled else { return }
+            state = .failed(error as? SpotifyQueue.LoadError ?? .unavailable)
+        }
+    }
+}

@@ -68,6 +68,7 @@ struct PlaybackInfo {
     let longFormInfo: LongFormInfo?
     var isShuffling: Bool? = nil
     var isRepeating: Bool? = nil
+    var spotifyTrackURI: String? = nil
 }
 
 protocol MusicPlayerController {
@@ -95,6 +96,8 @@ class PlaybackModel: ObservableObject {
     @Published var longFormInfo: LongFormInfo? = nil
     @Published private(set) var isShuffling: Bool?
     @Published private(set) var isRepeating: Bool?
+    @Published private(set) var spotifyTrackURI: String?
+    @Published var isShowingSpotifyQueue = false
 
     private let preferences: MusicPlayerPreferencesModel
     private var controller: MusicPlayerController
@@ -133,6 +136,7 @@ class PlaybackModel: ObservableObject {
     }
 
     func switchPlayer(to newPreference: PreferredPlayer) {
+        isShowingSpotifyQueue = false
         let (newController, newType) = Self.selectController(
             for: newPreference,
             preferences: preferences
@@ -205,6 +209,7 @@ class PlaybackModel: ObservableObject {
             self.longFormInfo = info.longFormInfo
             self.isShuffling = info.isShuffling
             self.isRepeating = info.isRepeating
+            self.spotifyTrackURI = info.spotifyTrackURI
 
             NotificationCenter.default.post(
                 name: .contentModelDidUpdate,
@@ -317,6 +322,7 @@ class PlaybackModel: ObservableObject {
             self.longFormInfo = nil
             self.isShuffling = nil
             self.isRepeating = nil
+            self.spotifyTrackURI = nil
         }
     }
 

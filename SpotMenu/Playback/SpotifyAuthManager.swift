@@ -17,30 +17,34 @@ class SpotifyAuthManager: ObservableObject {
     private let accessTokenKey = "accessToken"
     private let refreshTokenKey = "refreshToken"
     private let expiryDateKey = "tokenExpiry"
+    private var pendingAuthorization: (state: String, verifier: String)?
 
     @Published var didAuthenticate = false
 
     // MARK: - Public Interface
 
-    func startAuthentication() {
+    func startAuthentication(includeQueue: Bool = false) {
         guard let clientID = clientID, !clientID.isEmpty else {
             print("Missing Spotify Client ID")
             return
         }
 
         let codeVerifier = generateCodeVerifier()
-        UserDefaults.standard.set(codeVerifier, forKey: "spotify.codeVerifier")
+        let state = generateCodeVerifier()
+        pendingAuthorization = (state, codeVerifier)
         let codeChallenge = codeChallengeSHA256(codeVerifier)
+        var scope = "user-library-read user-library-modify"
+        if includeQueue {
+            scope += " user-read-currently-playing"
+        }
 
         var components = URLComponents(string: authURL)!
         components.queryItems = [
             .init(name: "client_id", value: clientID),
             .init(name: "response_type", value: "code"),
             .init(name: "redirect_uri", value: redirectURI),
-            .init(
-                name: "scope",
-                value: "user-library-read user-library-modify"
-            ),
+            .init(name: "scope", value: scope),
+            .init(name: "state", value: state),
             .init(name: "code_challenge_method", value: "S256"),
             .init(name: "code_challenge", value: codeChallenge),
         ]
@@ -53,21 +57,25 @@ class SpotifyAuthManager: ObservableObject {
     func handleRedirect(url: URL) {
         guard
             url.scheme == "com.github.kmikiy.spotmenu",
-            let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "code" })?.value,
-            let codeVerifier = UserDefaults.standard.string(
-                forKey: "spotify.codeVerifier"
-            )
+            url.host == "callback",
+            let pending = pendingAuthorization,
+            let parameters = URLComponents(
+                url: url, resolvingAgainstBaseURL: false
+            )?.queryItems,
+            parameters.first(where: { $0.name == "state" })?.value == pending.state
         else { return }
 
-        // Clean up after use
-        UserDefaults.standard.removeObject(forKey: "spotify.codeVerifier")
-
-        requestAccessToken(code: code, codeVerifier: codeVerifier)
+        pendingAuthorization = nil
+        guard let code = parameters.first(where: { $0.name == "code" })?.value
+        else { return }
+        requestAccessToken(code: code, codeVerifier: pending.verifier)
     }
 
-    func getAccessToken(completion: @escaping (String?) -> Void) {
-        guard let expiry = loadDate(key: expiryDateKey),
+    func getAccessToken(
+        forceRefresh: Bool = false,
+        completion: @escaping (String?) -> Void
+    ) {
+        guard !forceRefresh, let expiry = loadDate(key: expiryDateKey),
             expiry > Date(),
             let token = loadKeychain(key: accessTokenKey)
         else {
@@ -324,12 +332,20 @@ extension SpotifyAuthManager {
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: keychainService,
                 kSecAttrAccount as String: key,
+            ]
+            let attributes: [String: Any] = [
                 kSecValueData as String: data,
                 kSecAttrAccessible as String:
                     kSecAttrAccessibleAfterFirstUnlock,
             ]
-            SecItemDelete(query as CFDictionary)
-            SecItemAdd(query as CFDictionary, nil)
+            let status = SecItemUpdate(
+                query as CFDictionary, [kSecValueData as String: data] as CFDictionary
+            )
+            if status == errSecItemNotFound {
+                SecItemAdd(
+                    query.merging(attributes) { _, new in new } as CFDictionary, nil
+                )
+            }
         #endif
     }
 

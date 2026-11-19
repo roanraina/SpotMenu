@@ -135,7 +135,8 @@ class SpotifyController: MusicPlayerController {
             isLiked: isLikedResult,
             longFormInfo: longFormInfo,
             isShuffling: Bool(parts[8]),
-            isRepeating: Bool(parts[9])
+            isRepeating: Bool(parts[9]),
+            spotifyTrackURI: trackURI
         )
     }
 

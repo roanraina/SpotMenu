@@ -48,11 +48,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let playbackView = PlaybackView(
             model: playbackModel,
             preferences: playbackAppearancePreferencesModel,
-            musicPlayerPreferencesModel: musicPlayerPreferencesModel
-        ) { [weak self] in
-            self?.preferencesAction()
+            musicPlayerPreferencesModel: musicPlayerPreferencesModel,
+            openSettings: { [weak self] in self?.preferencesAction() },
+            connectSpotifyQueue: { [weak self] in
+                guard let self else { return }
+                self.popoverManager.dismiss()
+                LoginWindowManager.showLoginWindow(
+                    with: self.musicPlayerPreferencesModel, includeQueue: true
+                )
+            }
+        )
+        popoverManager = PopoverManager(contentView: playbackView) { [weak self] in
+            self?.playbackModel.isShowingSpotifyQueue = false
         }
-        popoverManager = PopoverManager(contentView: playbackView)
 
         // Global event monitor to dismiss popover
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [

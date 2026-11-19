@@ -1,16 +1,23 @@
 import SwiftUI
 
 class LoginWindowManager {
-    static var loginWindow: NSWindow?
+    private static var loginWindow: NSWindow?
+    private static var includesQueue = false
 
-    static func showLoginWindow(with preferences: MusicPlayerPreferencesModel){
-        guard loginWindow == nil else {
-            loginWindow?.makeKeyAndOrderFront(nil)
+    static func showLoginWindow(
+        with preferences: MusicPlayerPreferencesModel,
+        includeQueue: Bool = false
+    ) {
+        if let loginWindow, loginWindow.isVisible, includesQueue == includeQueue {
+            loginWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
-        let view = SpotifyLoginView(preferences: preferences)
+        loginWindow?.close()
+        includesQueue = includeQueue
+        SpotifyAuthManager.shared.didAuthenticate = false
+        let view = SpotifyLoginView(preferences: preferences, includeQueue: includeQueue)
         let hosting = NSHostingView(rootView: view)
 
         let window = NSWindow(

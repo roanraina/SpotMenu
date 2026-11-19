@@ -2,9 +2,11 @@ import SwiftUI
 
 class PopoverManager {
     private var window: PopoverWindow
+    private let onDismiss: () -> Void
 
-    init<Content: View>(contentView: Content) {
+    init<Content: View>(contentView: Content, onDismiss: @escaping () -> Void) {
         self.window = PopoverWindow(rootView: contentView)
+        self.onDismiss = onDismiss
     }
 
     func toggle(relativeTo button: NSStatusBarButton?) {
@@ -53,6 +55,7 @@ class PopoverManager {
         } completionHandler: {
             self.window.orderOut(nil)
             self.window.alphaValue = 1
+            self.onDismiss()
         }
     }
 }

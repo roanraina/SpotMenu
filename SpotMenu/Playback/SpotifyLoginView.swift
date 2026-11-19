@@ -3,6 +3,7 @@ import SwiftUI
 struct SpotifyLoginView: View {
     @ObservedObject var authManager = SpotifyAuthManager.shared
     @ObservedObject var preferences: MusicPlayerPreferencesModel
+    var includeQueue = false
     @State private var currentStep: Int = -1  // -1 = Intro, 0 = Client ID, 1 = Login
     @State private var instructionStep: Int = 0
 
@@ -147,7 +148,9 @@ struct SpotifyLoginView: View {
     private var introStep: some View {
         VStack(spacing: 20) {
             Text(
-                "SpotMenu needs access to the Spotify Web API to support liking tracks. AppleScript doesn't support liking on Spotify, so we use the Web API."
+                includeQueue
+                    ? "Connect your Spotify account to see the upcoming tracks and episodes Spotify returns."
+                    : "Connect your Spotify account to like tracks from SpotMenu."
             )
             .font(.body)
             .foregroundColor(.white.opacity(0.8))
@@ -155,7 +158,7 @@ struct SpotifyLoginView: View {
             .frame(maxWidth: 400)
 
             Text(
-                "Spotify only allows this if you create your own developer app. Normally this requires 250k monthly users and being a legal entity. But creating your own app bypasses this limit."
+                "Create a Spotify developer app and enter its Client ID. Spotify requires the owner of a Development Mode app to have Premium."
             )
             .font(.body)
             .foregroundColor(.white.opacity(0.8))
@@ -189,8 +192,10 @@ struct SpotifyLoginView: View {
                 .buttonStyle(.plain)
                 .frame(width: 260)
 
-                Button("I'm scared, just turn it off instead") {
-                    preferences.likingEnabled = false
+                Button(includeQueue ? "Cancel" : "Turn Off Track Liking") {
+                    if !includeQueue {
+                        preferences.likingEnabled = false
+                    }
                     NSApp.keyWindow?.close()
                 }
                 .foregroundColor(.gray)
@@ -363,8 +368,12 @@ struct SpotifyLoginView: View {
                 }
             } else {
                 Spacer()
+                if includeQueue {
+                    Text("Grant read access to your Spotify queue.")
+                        .foregroundColor(.white.opacity(0.8))
+                }
                 Button(action: {
-                    authManager.startAuthentication()
+                    authManager.startAuthentication(includeQueue: includeQueue)
                 }) {
                     HStack(alignment: .center, spacing: 12) {
                         Image(systemName: "arrow.right.circle.fill")

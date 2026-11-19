@@ -6,6 +6,7 @@ struct PlaybackView: View {
     @ObservedObject var preferences: PlaybackAppearancePreferencesModel
     @ObservedObject var musicPlayerPreferencesModel: MusicPlayerPreferencesModel
     var openSettings: (() -> Void)? = nil
+    var connectSpotifyQueue: (() -> Void)? = nil
     @State private var isHovering = false
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -15,10 +16,15 @@ struct PlaybackView: View {
                 .fill(.ultraThinMaterial)
                 .frame(width: 300, height: 300)
 
-            content
-                .clipShape(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+            if let connectSpotifyQueue, model.isShowingSpotifyQueue {
+                SpotifyQueueView(
+                    trackURI: model.spotifyTrackURI,
+                    close: { model.isShowingSpotifyQueue = false },
+                    connect: connectSpotifyQueue
                 )
+            } else {
+                content
+            }
         }
         .frame(width: 300, height: 300)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -97,6 +103,20 @@ struct PlaybackView: View {
                 .buttonStyle(.plain)
 
                 Spacer()
+
+                if connectSpotifyQueue != nil && model.playerType == .spotify {
+                    Button {
+                        model.isShowingSpotifyQueue = true
+                    } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(preferences.foregroundColor.color)
+                            .frame(width: 24, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Up Next")
+                    .help("Show Spotify queue")
+                }
 
                 if let openSettings {
                     Button(action: openSettings) {
