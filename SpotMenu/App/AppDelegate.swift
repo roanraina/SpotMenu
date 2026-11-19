@@ -50,17 +50,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             preferences: playbackAppearancePreferencesModel,
             musicPlayerPreferencesModel: musicPlayerPreferencesModel,
             openSettings: { [weak self] in self?.preferencesAction() },
-            connectSpotifyQueue: { [weak self] in
-                guard let self else { return }
-                self.popoverManager.dismiss()
-                LoginWindowManager.showLoginWindow(
-                    with: self.musicPlayerPreferencesModel
-                )
+            showSpotifyQueue: { [weak self] in self?.popoverManager.showQueue() },
+            spotifyQueueHover: { [weak self] hovering in
+                self?.popoverManager.queueTriggerHovered(hovering)
             }
         )
-        popoverManager = PopoverManager(contentView: playbackView) { [weak self] in
-            self?.playbackModel.isShowingSpotifyQueue = false
-        }
+        popoverManager = PopoverManager(
+            contentView: playbackView,
+            queueContent: { [weak self, playback = playbackModel!] in
+                SpotifyQueueView(
+                    playback: playback,
+                    close: { [weak self] in self?.popoverManager.dismissQueue() },
+                    connect: { [weak self] in
+                        guard let self else { return }
+                        self.popoverManager.dismiss()
+                        LoginWindowManager.showLoginWindow(with: self.musicPlayerPreferencesModel)
+                    }
+                )
+            },
+            onQueueVisibilityChanged: { [weak self] isVisible in
+                self?.playbackModel.isShowingSpotifyQueue = isVisible
+            }
+        )
 
         // Global event monitor to dismiss popover
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [
@@ -177,7 +188,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func togglePopover() {
-        popoverManager.toggle(relativeTo: statusItem.button)
+        popoverManager.toggle(
+            relativeTo: statusItem.button, reserveQueueSpace: playbackModel.playerType == .spotify
+        )
     }
 
     private func handleRightClick(event: NSEvent) -> Bool {

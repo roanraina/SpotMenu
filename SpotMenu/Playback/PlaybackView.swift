@@ -6,7 +6,8 @@ struct PlaybackView: View {
     @ObservedObject var preferences: PlaybackAppearancePreferencesModel
     @ObservedObject var musicPlayerPreferencesModel: MusicPlayerPreferencesModel
     var openSettings: (() -> Void)? = nil
-    var connectSpotifyQueue: (() -> Void)? = nil
+    var showSpotifyQueue: (() -> Void)? = nil
+    var spotifyQueueHover: ((Bool) -> Void)? = nil
     @State private var isHovering = false
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -16,15 +17,7 @@ struct PlaybackView: View {
                 .fill(.ultraThinMaterial)
                 .frame(width: 300, height: 300)
 
-            if let connectSpotifyQueue, model.isShowingSpotifyQueue {
-                SpotifyQueueView(
-                    trackURI: model.spotifyTrackURI,
-                    close: { model.isShowingSpotifyQueue = false },
-                    connect: connectSpotifyQueue
-                )
-            } else {
-                content
-            }
+            content
         }
         .frame(width: 300, height: 300)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -35,11 +28,15 @@ struct PlaybackView: View {
         }
     }
 
+    private var showsControls: Bool {
+        isHovering || (showSpotifyQueue != nil && model.isShowingSpotifyQueue)
+    }
+
     @ViewBuilder
     private var content: some View {
-        let blurRadius = isHovering ? preferences.blurIntensity * 10 : 0
+        let blurRadius = showsControls ? preferences.blurIntensity * 10 : 0
         let overlayColor =
-            isHovering
+            showsControls
             ? adaptiveHoverTintColor.opacity(preferences.hoverTintOpacity)
             : nil
 
@@ -79,7 +76,7 @@ struct PlaybackView: View {
             .overlay(overlayColor)
         }
 
-        if isHovering {
+        if showsControls {
             controlsOverlay
                 .frame(width: 300, height: 300)
         }
@@ -104,10 +101,8 @@ struct PlaybackView: View {
 
                 Spacer()
 
-                if connectSpotifyQueue != nil && model.playerType == .spotify {
-                    Button {
-                        model.isShowingSpotifyQueue = true
-                    } label: {
+                if let showSpotifyQueue, model.playerType == .spotify {
+                    Button(action: showSpotifyQueue) {
                         Image(systemName: "list.bullet")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(preferences.foregroundColor.color)
@@ -115,7 +110,8 @@ struct PlaybackView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Up Next")
-                    .help("Show Spotify queue")
+                    .help("Hover to show Spotify queue")
+                    .onHover { spotifyQueueHover?($0) }
                 }
 
                 if let openSettings {

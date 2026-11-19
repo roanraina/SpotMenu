@@ -136,7 +136,6 @@ class PlaybackModel: ObservableObject {
     }
 
     func switchPlayer(to newPreference: PreferredPlayer) {
-        isShowingSpotifyQueue = false
         let (newController, newType) = Self.selectController(
             for: newPreference,
             preferences: preferences

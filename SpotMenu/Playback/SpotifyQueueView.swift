@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SpotifyQueueView: View {
-    let trackURI: String?
+    @ObservedObject var playback: PlaybackModel
     let close: () -> Void
     let connect: () -> Void
 
@@ -23,11 +23,11 @@ struct SpotifyQueueView: View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: close) {
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "xmark")
                         .frame(width: 26, height: 26)
                 }
-                .accessibilityLabel("Back to playback")
-                .help("Back to playback")
+                .accessibilityLabel("Close queue")
+                .help("Close queue")
 
                 Spacer()
                 Text("Up Next").font(.headline)
@@ -52,8 +52,11 @@ struct SpotifyQueueView: View {
         }
         .frame(width: 300, height: 300)
         .background(.regularMaterial)
-        .task(id: Refresh(trackURI: trackURI, count: refreshCount)) {
+        .task(id: Refresh(trackURI: playback.spotifyTrackURI, count: refreshCount)) {
             await load()
+        }
+        .onChange(of: playback.playerType) { player in
+            if player != .spotify { close() }
         }
     }
 
