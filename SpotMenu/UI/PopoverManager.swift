@@ -2,12 +2,16 @@ import SwiftUI
 
 class PopoverManager {
     private static let queueGap: CGFloat = 6
+    private static let queueDismissDelay: TimeInterval = 15
+    private static let queueSlideDistance: CGFloat = 24
     private let window: PopoverWindow
     private let makeQueueWindow: (@escaping (Bool) -> Void) -> PopoverWindow
     private let onPlaybackVisibilityChanged: (Bool) -> Void
     private let onQueueVisibilityChanged: (Bool) -> Void
     private var queueWindow: PopoverWindow?
     private var queueDismissTimer: Timer?
+    private var queueCloseID: UUID?
+    private var isQueueTriggerHovered = false
     private(set) var isPlaybackVisible = false
 
     init<Content: View, QueueContent: View>(
@@ -72,7 +76,8 @@ class PopoverManager {
     }
 
     func queueTriggerHovered(_ hovering: Bool) {
-        if hovering {
+        isQueueTriggerHovered = hovering && isPlaybackVisible
+        if isQueueTriggerHovered {
             showQueue()
         } else {
             scheduleQueueDismissal()
@@ -80,36 +85,45 @@ class PopoverManager {
     }
 
     func showQueue() {
+        guard isPlaybackVisible, let screen = window.screen else { return }
         queueDismissTimer?.invalidate()
-        guard queueWindow == nil, isPlaybackVisible, let screen = window.screen else {
+        if queueWindow != nil, queueCloseID == nil {
+            scheduleQueueDismissal()
             return
         }
 
-        let queue = makeQueueWindow { [weak self] hovering in
+        let queue = queueWindow ?? makeQueueWindow { [weak self] hovering in
+            guard let self, self.queueCloseID == nil else { return }
             if hovering {
-                self?.queueDismissTimer?.invalidate()
+                self.queueDismissTimer?.invalidate()
             } else {
-                self?.scheduleQueueDismissal()
+                self.scheduleQueueDismissal()
             }
         }
         let origin = Self.queueOrigin(
             beside: window.frame, queueWidth: queue.frame.width, visibleFrame: screen.visibleFrame
         )
-        queue.setFrameOrigin(origin)
-        queueWindow = queue
-        window.addChildWindow(queue, ordered: .above)
-        queue.orderFront(nil)
-        onQueueVisibilityChanged(true)
+        if queueWindow == nil {
+            queue.alphaValue = 0
+            queue.setFrameOrigin(queueHiddenOrigin(from: origin, queueWidth: queue.frame.width))
+            queueWindow = queue
+            window.addChildWindow(queue, ordered: .above)
+            queue.orderFront(nil)
+            onQueueVisibilityChanged(true)
+        }
+        queueCloseID = nil
+        queue.ignoresMouseEvents = false
+        animateQueue(queue, to: origin, opacity: 1)
+        scheduleQueueDismissal()
     }
 
     private func scheduleQueueDismissal() {
         queueDismissTimer?.invalidate()
-        guard queueWindow != nil else { return }
-        // Let the pointer cross from the icon to the adjacent window.
-        queueDismissTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) {
+        guard queueWindow != nil, queueCloseID == nil, !isQueueTriggerHovered else { return }
+        queueDismissTimer = Timer.scheduledTimer(withTimeInterval: Self.queueDismissDelay, repeats: false) {
             [weak self] _ in
             guard let self, let queue = self.queueWindow,
-                !queue.frame.contains(NSEvent.mouseLocation)
+                !self.isQueueTriggerHovered, !queue.frame.contains(NSEvent.mouseLocation)
             else { return }
             self.dismissQueue()
         }
@@ -118,11 +132,36 @@ class PopoverManager {
     func dismissQueue() {
         queueDismissTimer?.invalidate()
         queueDismissTimer = nil
-        guard let queue = queueWindow else { return }
-        queueWindow = nil
-        window.removeChildWindow(queue)
-        queue.orderOut(nil)
-        onQueueVisibilityChanged(false)
+        guard let queue = queueWindow, queueCloseID == nil else { return }
+
+        let closeID = UUID()
+        queueCloseID = closeID
+        queue.ignoresMouseEvents = true
+        let origin = queueHiddenOrigin(from: queue.frame.origin, queueWidth: queue.frame.width)
+        animateQueue(queue, to: origin, opacity: 0) { [weak self, weak queue] in
+            guard let self, let queue, self.queueCloseID == closeID else { return }
+            self.queueCloseID = nil
+            self.queueWindow = nil
+            self.window.removeChildWindow(queue)
+            queue.orderOut(nil)
+            self.onQueueVisibilityChanged(false)
+        }
+    }
+
+    private func queueHiddenOrigin(from origin: CGPoint, queueWidth: CGFloat) -> CGPoint {
+        let direction: CGFloat = origin.x + queueWidth / 2 >= window.frame.midX ? -1 : 1
+        return CGPoint(x: origin.x + direction * Self.queueSlideDistance, y: origin.y)
+    }
+
+    private func animateQueue(
+        _ queue: PopoverWindow, to origin: CGPoint, opacity: CGFloat, completion: (() -> Void)? = nil
+    ) {
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            queue.animator().setFrame(NSRect(origin: origin, size: queue.frame.size), display: true)
+            queue.animator().alphaValue = opacity
+        }, completionHandler: completion)
     }
 
     static func playbackX(
@@ -145,6 +184,7 @@ class PopoverManager {
     }
 
     func dismiss() {
+        isQueueTriggerHovered = false
         dismissQueue()
         guard isPlaybackVisible else { return }
         isPlaybackVisible = false
