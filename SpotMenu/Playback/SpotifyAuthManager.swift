@@ -35,10 +35,13 @@ class SpotifyAuthManager: ObservableObject {
     // MARK: - Public Interface
 
     static func authorizationScopes(likingEnabled: Bool) -> [String] {
-        let queueScope = ["user-read-currently-playing"]
+        let queueScopes = [
+            "user-read-currently-playing",
+            "user-read-playback-state",
+        ]
         return likingEnabled
-            ? queueScope + ["user-library-read", "user-library-modify"]
-            : queueScope
+            ? queueScopes + ["user-library-read", "user-library-modify"]
+            : queueScopes
     }
 
     func startAuthentication(likingEnabled: Bool) {
