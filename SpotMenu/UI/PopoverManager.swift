@@ -2,8 +2,8 @@ import SwiftUI
 
 class PopoverManager {
     private static let queueGap: CGFloat = 6
-    private static let queueDismissDelay: TimeInterval = 15
-    private static let queueSlideDistance: CGFloat = 24
+    private static let queueDismissDelay: TimeInterval = 7
+    private static let queueSlideDuration: TimeInterval = 0.28
     private let window: PopoverWindow
     private let makeQueueWindow: (@escaping (Bool) -> Void) -> PopoverWindow
     private let onPlaybackVisibilityChanged: (Bool) -> Void
@@ -105,10 +105,9 @@ class PopoverManager {
         )
         if queueWindow == nil {
             queue.alphaValue = 0
-            queue.setFrameOrigin(queueHiddenOrigin(from: origin, queueWidth: queue.frame.width))
+            queue.setFrameOrigin(queueHiddenOrigin(queueWidth: queue.frame.width))
             queueWindow = queue
-            window.addChildWindow(queue, ordered: .above)
-            queue.orderFront(nil)
+            window.addChildWindow(queue, ordered: .below)
             onQueueVisibilityChanged(true)
         }
         queueCloseID = nil
@@ -137,7 +136,7 @@ class PopoverManager {
         let closeID = UUID()
         queueCloseID = closeID
         queue.ignoresMouseEvents = true
-        let origin = queueHiddenOrigin(from: queue.frame.origin, queueWidth: queue.frame.width)
+        let origin = queueHiddenOrigin(queueWidth: queue.frame.width)
         animateQueue(queue, to: origin, opacity: 0) { [weak self, weak queue] in
             guard let self, let queue, self.queueCloseID == closeID else { return }
             self.queueCloseID = nil
@@ -148,16 +147,15 @@ class PopoverManager {
         }
     }
 
-    private func queueHiddenOrigin(from origin: CGPoint, queueWidth: CGFloat) -> CGPoint {
-        let direction: CGFloat = origin.x + queueWidth / 2 >= window.frame.midX ? -1 : 1
-        return CGPoint(x: origin.x + direction * Self.queueSlideDistance, y: origin.y)
+    private func queueHiddenOrigin(queueWidth: CGFloat) -> CGPoint {
+        CGPoint(x: window.frame.midX - queueWidth / 2, y: window.frame.minY)
     }
 
     private func animateQueue(
         _ queue: PopoverWindow, to origin: CGPoint, opacity: CGFloat, completion: (() -> Void)? = nil
     ) {
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : Self.queueSlideDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             queue.animator().setFrame(NSRect(origin: origin, size: queue.frame.size), display: true)
             queue.animator().alphaValue = opacity
