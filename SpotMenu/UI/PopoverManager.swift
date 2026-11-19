@@ -3,7 +3,7 @@ import SwiftUI
 class PopoverManager {
     private static let queueGap: CGFloat = 6
     private static let queueDismissDelay: TimeInterval = 7
-    private static let queueSlideDuration: TimeInterval = 0.28
+    private static let queueSlideDuration: TimeInterval = 0.5
     private let window: PopoverWindow
     private let makeQueueWindow: (@escaping (Bool) -> Void) -> PopoverWindow
     private let onPlaybackVisibilityChanged: (Bool) -> Void
