@@ -6,7 +6,19 @@ struct SpotifyQueueView: View {
     let connect: () -> Void
 
     @State private var state = LoadState.loading
+    @State private var isLoading = true
     @State private var refreshCount = 0
+    @State private var contentBottom: CGFloat = .infinity
+
+    private static let scrollSpace = "SpotifyQueueViewport"
+
+    private struct QueueBottom: PreferenceKey {
+        static let defaultValue: CGFloat = .infinity
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
+        }
+    }
 
     private enum LoadState {
         case loading
@@ -33,25 +45,48 @@ struct SpotifyQueueView: View {
                 Text("Up Next").font(.headline)
                 Spacer()
 
-                Button {
-                    refreshCount += 1
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .frame(width: 26, height: 26)
+                ZStack {
+                    if isLoading {
+                        ProgressView().controlSize(.small)
+                            .accessibilityLabel("Refreshing queue")
+                    }
                 }
-                .disabled(isLoading)
-                .accessibilityLabel("Refresh queue")
-                .help("Refresh queue")
+                .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 
             Divider()
-            queueContent
+            GeometryReader { viewport in
+                ScrollView {
+                    queueContent
+                        .frame(
+                            minHeight: viewport.size.height,
+                            alignment: contentAlignment
+                        )
+                        .background {
+                            GeometryReader { content in
+                                Color.clear.preference(
+                                    key: QueueBottom.self,
+                                    value: content.frame(in: .named(Self.scrollSpace)).maxY
+                                )
+                            }
+                        }
+                }
+                .coordinateSpace(name: Self.scrollSpace)
+                .onPreferenceChange(QueueBottom.self) { contentBottom = $0 }
+                .background {
+                    QueuePullObserver(
+                        atBottom: contentBottom <= viewport.size.height + 2,
+                        refresh: requestRefresh
+                    )
+                }
+            }
         }
         .frame(width: 300, height: 300)
         .background(.regularMaterial)
+        .accessibilityAction(named: Text("Refresh queue"), requestRefresh)
         .task(id: Refresh(trackURI: playback.spotifyTrackURI, count: refreshCount)) {
             await load()
         }
@@ -60,9 +95,9 @@ struct SpotifyQueueView: View {
         }
     }
 
-    private var isLoading: Bool {
-        if case .loading = state { return true }
-        return false
+    private var contentAlignment: Alignment {
+        if case .loaded(let items) = state, !items.isEmpty { return .topLeading }
+        return .center
     }
 
     @ViewBuilder private var queueContent: some View {
@@ -73,26 +108,24 @@ struct SpotifyQueueView: View {
         case .loaded(let items) where items.isEmpty:
             message("No upcoming tracks or episodes.")
         case .loaded(let items):
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(items.indices, id: \.self) { index in
-                        let item = items[index]
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name).lineLimit(1)
-                            if let subtitle = item.subtitle, !subtitle.isEmpty {
-                                Text(subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(items.indices, id: \.self) { index in
+                    let item = items[index]
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name).lineLimit(1)
+                        if let subtitle = item.subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
-                        .accessibilityElement(children: .combine)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .accessibilityElement(children: .combine)
                 }
-                .padding(.vertical, 4)
             }
+            .padding(.vertical, 4)
         case .failed(.signInRequired, let detail):
             message(detail, button: "Connect Spotify")
         case .failed(.insufficientScope, let detail):
@@ -115,8 +148,17 @@ struct SpotifyQueueView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func requestRefresh() {
+        guard !isLoading else { return }
+        isLoading = true
+        refreshCount += 1
+    }
+
     @MainActor private func load() async {
-        state = .loading
+        isLoading = true
+        defer {
+            if !Task.isCancelled { isLoading = false }
+        }
         do {
             let items = try await SpotifyQueue.load()
             guard !Task.isCancelled else { return }
