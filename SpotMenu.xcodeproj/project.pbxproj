@@ -286,7 +286,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\ngit_hash=$(git rev-parse --short HEAD)\n\n  if [ -z \"$git_hash\" ]; then\n      echo \"warning: Unable to get git hash\"\n      exit 0\n  fi\n\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $git_hash\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n\n  echo \"Build number set to: $git_hash\"\n";
+			shellScript = "set -e\nplist_path=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\ngit_hash=$(/bin/sh \"${SRCROOT}/Scripts/stamp-git-version.sh\" \"$SRCROOT\" \"$plist_path\")\nif [ -n \"$git_hash\" ]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $git_hash\" \"$plist_path\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

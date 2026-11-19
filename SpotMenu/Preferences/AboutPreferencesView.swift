@@ -6,8 +6,10 @@ struct AboutPreferencesView: View {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
     }
 
-    private var buildNumber: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+    private var buildIdentifier: String {
+        Bundle.main.object(forInfoDictionaryKey: "SpotMenuGitCommit") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? "Unknown"
     }
 
     // Sparkle updater (shared instance)
@@ -30,9 +32,10 @@ struct AboutPreferencesView: View {
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
-                    Text("Version \(appVersion) (\(buildNumber))")
+                    Text("Version \(appVersion) (\(buildIdentifier))")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
                 .padding(.top, 20)
 
