@@ -8,17 +8,6 @@ struct SpotifyQueueView: View {
     @State private var state = LoadState.loading
     @State private var isLoading = true
     @State private var refreshCount = 0
-    @State private var contentTop: CGFloat = -.infinity
-
-    private static let scrollSpace = "SpotifyQueueViewport"
-
-    private struct QueueTop: PreferenceKey {
-        static let defaultValue: CGFloat = -.infinity
-
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-            value = nextValue()
-        }
-    }
 
     private enum LoadState {
         case loading
@@ -45,28 +34,10 @@ struct SpotifyQueueView: View {
 
             Divider()
             GeometryReader { viewport in
-                ScrollView {
+                QueueScrollView(viewport: viewport.size, refresh: requestRefresh) {
                     queueContent
-                        .frame(
-                            minHeight: viewport.size.height,
-                            alignment: contentAlignment
-                        )
-                        .background {
-                            GeometryReader { content in
-                                Color.clear.preference(
-                                    key: QueueTop.self,
-                                    value: content.frame(in: .named(Self.scrollSpace)).minY
-                                )
-                            }
-                        }
-                }
-                .coordinateSpace(name: Self.scrollSpace)
-                .onPreferenceChange(QueueTop.self) { contentTop = $0 }
-                .background {
-                    QueuePullObserver(
-                        atTop: contentTop >= -2,
-                        refresh: requestRefresh
-                    )
+                        .frame(width: viewport.size.width, alignment: contentAlignment)
+                        .frame(minHeight: viewport.size.height, alignment: contentAlignment)
                 }
             }
         }
@@ -94,7 +65,7 @@ struct SpotifyQueueView: View {
         case .loaded(let items) where items.isEmpty:
             message("No upcoming tracks or episodes.")
         case .loaded(let items):
-            LazyVStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(items.indices, id: \.self) { index in
                     let item = items[index]
                     VStack(alignment: .leading, spacing: 2) {
