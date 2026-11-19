@@ -11,7 +11,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var playbackModel: PlaybackModel!
     var menuBarPreferencesModel = MenuBarPreferencesModel()
     var popoverManager: PopoverManager!
-    private let queueModel = SpotifyQueueModel()
     private var queuePlaybackCancellable: AnyCancellable?
     var preferencesWindow: NSWindow?
     var eventMonitor: Any?
@@ -47,6 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Set up popover manager
+        let queueModel = SpotifyQueueModel()
         let playbackView = PlaybackView(
             model: playbackModel,
             preferences: playbackAppearancePreferencesModel,
@@ -59,7 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         popoverManager = PopoverManager(
             contentView: playbackView,
-            queueContent: { [weak self, queueModel] in
+            queueContent: { [weak self] in
                 SpotifyQueueView(
                     model: queueModel,
                     close: { [weak self] in self?.popoverManager.dismissQueue() },
@@ -72,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onPlaybackVisibilityChanged: { [weak self] visible in
                 guard let self else { return }
-                self.queueModel.update(
+                queueModel.update(
                     isActive: visible && self.playbackModel.playerType == .spotify,
                     trackURI: self.playbackModel.spotifyTrackURI
                 )
@@ -89,7 +89,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if player != .spotify {
                     self.popoverManager.dismissQueue()
                 }
-                self.queueModel.update(
+                queueModel.update(
                     isActive: self.popoverManager.isPlaybackVisible && player == .spotify,
                     trackURI: trackURI
                 )
