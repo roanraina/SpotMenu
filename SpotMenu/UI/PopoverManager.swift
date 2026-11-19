@@ -4,13 +4,16 @@ class PopoverManager {
     private static let queueGap: CGFloat = 6
     private let window: PopoverWindow
     private let makeQueueWindow: (@escaping (Bool) -> Void) -> PopoverWindow
+    private let onPlaybackVisibilityChanged: (Bool) -> Void
     private let onQueueVisibilityChanged: (Bool) -> Void
     private var queueWindow: PopoverWindow?
     private var queueDismissTimer: Timer?
+    private(set) var isPlaybackVisible = false
 
     init<Content: View, QueueContent: View>(
         contentView: Content,
         queueContent: @escaping () -> QueueContent,
+        onPlaybackVisibilityChanged: @escaping (Bool) -> Void,
         onQueueVisibilityChanged: @escaping (Bool) -> Void
     ) {
         self.window = PopoverWindow(rootView: contentView)
@@ -21,13 +24,14 @@ class PopoverManager {
                     .onHover(perform: onHover)
             )
         }
+        self.onPlaybackVisibilityChanged = onPlaybackVisibilityChanged
         self.onQueueVisibilityChanged = onQueueVisibilityChanged
     }
 
     func toggle(relativeTo button: NSStatusBarButton?, reserveQueueSpace: Bool) {
         guard let button = button else { return }
 
-        if window.isVisible {
+        if isPlaybackVisible {
             dismiss()
         } else {
             show(relativeTo: button, reserveQueueSpace: reserveQueueSpace)
@@ -58,6 +62,8 @@ class PopoverManager {
         window.setFrameOrigin(NSPoint(x: popoverX, y: popoverY))
         window.alphaValue = 0
         window.makeKeyAndOrderFront(nil)
+        isPlaybackVisible = true
+        onPlaybackVisibilityChanged(true)
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
@@ -75,7 +81,7 @@ class PopoverManager {
 
     func showQueue() {
         queueDismissTimer?.invalidate()
-        guard queueWindow == nil, window.isVisible, let screen = window.screen else {
+        guard queueWindow == nil, isPlaybackVisible, let screen = window.screen else {
             return
         }
 
@@ -140,11 +146,14 @@ class PopoverManager {
 
     func dismiss() {
         dismissQueue()
-        guard window.isVisible else { return }
+        guard isPlaybackVisible else { return }
+        isPlaybackVisible = false
+        onPlaybackVisibilityChanged(false)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             window.animator().alphaValue = 0
         } completionHandler: {
+            guard !self.isPlaybackVisible else { return }
             self.window.orderOut(nil)
             self.window.alphaValue = 1
         }

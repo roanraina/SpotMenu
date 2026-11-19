@@ -1,67 +1,51 @@
 import SwiftUI
 
 struct SpotifyQueueView: View {
-    @ObservedObject var playback: PlaybackModel
+    @ObservedObject var model: SpotifyQueueModel
     let close: () -> Void
     let connect: () -> Void
 
-    @State private var state = LoadState.loading
-    @State private var isLoading = true
-    @State private var refreshCount = 0
-
-    private enum LoadState {
-        case loading
-        case loaded([SpotifyQueue.Item])
-        case failed(SpotifyQueue.LoadError?, message: String)
-    }
-
-    private struct Refresh: Equatable {
-        let trackURI: String?
-        let count: Int
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                if isLoading {
-                    ProgressView().controlSize(.small)
-                    Text("Refreshing queue…").font(.headline)
-                } else {
-                    Text("Up Next").font(.headline)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 46)
+            Text("Queue")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 46)
 
             Divider()
             GeometryReader { viewport in
-                QueueScrollView(viewport: viewport.size, refresh: requestRefresh) {
-                    queueContent
-                        .frame(width: viewport.size.width, alignment: contentAlignment)
-                        .frame(minHeight: viewport.size.height, alignment: contentAlignment)
+                QueueScrollView(viewport: viewport.size, refresh: model.refresh) {
+                    VStack(spacing: 0) {
+                        if model.isLoading {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .controlSize(.small)
+                                .accessibilityLabel("Refreshing queue")
+                                .padding(.vertical, 8)
+                        }
+                        queueContent
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(width: viewport.size.width)
+                    .frame(minHeight: viewport.size.height, alignment: contentAlignment)
                 }
             }
         }
         .frame(width: 300, height: 300)
         .background(.regularMaterial)
-        .accessibilityAction(named: Text("Refresh queue"), requestRefresh)
+        .accessibilityAction(named: Text("Refresh queue"), model.refresh)
         .onExitCommand(perform: close)
-        .task(id: Refresh(trackURI: playback.spotifyTrackURI, count: refreshCount)) {
-            await load()
-        }
-        .onChange(of: playback.playerType) { player in
-            if player != .spotify { close() }
-        }
     }
 
     private var contentAlignment: Alignment {
-        if case .loaded(let items) = state, !items.isEmpty { return .topLeading }
+        if model.isLoading { return .top }
+        if case .loaded(let items) = model.state, !items.isEmpty { return .top }
         return .center
     }
 
     @ViewBuilder private var queueContent: some View {
-        switch state {
-        case .loading:
-            Color.clear
+        switch model.state {
+        case .pending:
+            EmptyView()
         case .loaded(let items) where items.isEmpty:
             message("No upcoming tracks or episodes.")
         case .loaded(let items):
@@ -103,30 +87,5 @@ struct SpotifyQueueView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func requestRefresh() {
-        guard !isLoading else { return }
-        isLoading = true
-        refreshCount += 1
-    }
-
-    @MainActor private func load() async {
-        isLoading = true
-        let started = ProcessInfo.processInfo.systemUptime
-        let result: LoadState
-        do {
-            let items = try await SpotifyQueue.load()
-            result = .loaded(items)
-        } catch {
-            result = .failed(error as? SpotifyQueue.LoadError, message: error.localizedDescription)
-        }
-        let remaining = 0.8 - (ProcessInfo.processInfo.systemUptime - started)
-        if remaining > 0 {
-            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-        }
-        guard !Task.isCancelled else { return }
-        state = result
-        isLoading = false
     }
 }

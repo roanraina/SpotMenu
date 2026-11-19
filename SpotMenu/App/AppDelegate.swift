@@ -11,6 +11,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var playbackModel: PlaybackModel!
     var menuBarPreferencesModel = MenuBarPreferencesModel()
     var popoverManager: PopoverManager!
+    private let queueModel = SpotifyQueueModel()
+    private var queuePlaybackCancellable: AnyCancellable?
     var preferencesWindow: NSWindow?
     var eventMonitor: Any?
     var menuBarPreferencesModelCancellable: AnyCancellable?
@@ -57,9 +59,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         popoverManager = PopoverManager(
             contentView: playbackView,
-            queueContent: { [weak self, playback = playbackModel!] in
+            queueContent: { [weak self, queueModel] in
                 SpotifyQueueView(
-                    playback: playback,
+                    model: queueModel,
                     close: { [weak self] in self?.popoverManager.dismissQueue() },
                     connect: { [weak self] in
                         guard let self else { return }
@@ -68,10 +70,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 )
             },
+            onPlaybackVisibilityChanged: { [weak self] visible in
+                guard let self else { return }
+                self.queueModel.update(
+                    isActive: visible && self.playbackModel.playerType == .spotify,
+                    trackURI: self.playbackModel.spotifyTrackURI
+                )
+            },
             onQueueVisibilityChanged: { [weak self] isVisible in
                 self?.playbackModel.isShowingSpotifyQueue = isVisible
             }
         )
+
+        queuePlaybackCancellable = playbackModel.$playerType
+            .combineLatest(playbackModel.$spotifyTrackURI)
+            .sink { [weak self] player, trackURI in
+                guard let self else { return }
+                if player != .spotify {
+                    self.popoverManager.dismissQueue()
+                }
+                self.queueModel.update(
+                    isActive: self.popoverManager.isPlaybackVisible && player == .spotify,
+                    trackURI: trackURI
+                )
+            }
 
         // Global event monitor to dismiss popover
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [
