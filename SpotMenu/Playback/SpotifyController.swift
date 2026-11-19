@@ -82,9 +82,12 @@ class SpotifyController: MusicPlayerController {
         var isLikedResult: Bool? = lastIsLiked
         var longFormInfo: LongFormInfo? = nil
 
-        if !isTrack {
+        if !isTrack || !preferences.likingEnabled {
             isLikedResult = nil
             lastIsLiked = nil
+        }
+        if !preferences.likingEnabled {
+            lastTrackID = nil
         }
 
         if longFormKind != nil, let trackID, let longFormKind {
@@ -110,7 +113,7 @@ class SpotifyController: MusicPlayerController {
             }
         }
 
-        if let trackID = trackID, trackID != lastTrackID, isTrack {
+        if preferences.likingEnabled, let trackID, trackID != lastTrackID, isTrack {
             let semaphore = DispatchSemaphore(value: 0)
 
             SpotifyAuthManager.shared.checkIfTrackIsLiked(trackID: trackID) {
@@ -177,7 +180,7 @@ class SpotifyController: MusicPlayerController {
     }
 
     func toggleLiked() {
-        guard let trackID = getCurrentTrackID(), lastTrackType == "track"
+        guard preferences.likingEnabled, let trackID = getCurrentTrackID(), lastTrackType == "track"
         else { return }
 
         SpotifyAuthManager.shared.checkIfTrackIsLiked(trackID: trackID) {
@@ -200,7 +203,7 @@ class SpotifyController: MusicPlayerController {
     }
 
     func likeTrack() {
-        guard let trackID = getCurrentTrackID(), lastTrackType == "track"
+        guard preferences.likingEnabled, let trackID = getCurrentTrackID(), lastTrackType == "track"
         else { return }
 
         SpotifyAuthManager.shared.checkIfTrackIsLiked(trackID: trackID) {
@@ -220,7 +223,7 @@ class SpotifyController: MusicPlayerController {
     }
 
     func unlikeTrack() {
-        guard let trackID = getCurrentTrackID(), lastTrackType == "track"
+        guard preferences.likingEnabled, let trackID = getCurrentTrackID(), lastTrackType == "track"
         else { return }
 
         SpotifyAuthManager.shared.checkIfTrackIsLiked(trackID: trackID) {

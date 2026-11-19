@@ -23,7 +23,14 @@ class SpotifyAuthManager: ObservableObject {
 
     // MARK: - Public Interface
 
-    func startAuthentication(includeQueue: Bool = false) {
+    static func authorizationScopes(likingEnabled: Bool) -> [String] {
+        let queueScope = ["user-read-currently-playing"]
+        return likingEnabled
+            ? queueScope + ["user-library-read", "user-library-modify"]
+            : queueScope
+    }
+
+    func startAuthentication(likingEnabled: Bool) {
         guard let clientID = clientID, !clientID.isEmpty else {
             print("Missing Spotify Client ID")
             return
@@ -33,10 +40,8 @@ class SpotifyAuthManager: ObservableObject {
         let state = generateCodeVerifier()
         pendingAuthorization = (state, codeVerifier)
         let codeChallenge = codeChallengeSHA256(codeVerifier)
-        var scope = "user-library-read user-library-modify"
-        if includeQueue {
-            scope += " user-read-currently-playing"
-        }
+        let scope = Self.authorizationScopes(likingEnabled: likingEnabled)
+            .joined(separator: " ")
 
         var components = URLComponents(string: authURL)!
         components.queryItems = [

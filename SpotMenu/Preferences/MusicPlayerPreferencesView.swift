@@ -48,62 +48,58 @@ struct MusicPlayerPreferencesView: View {
                                     }
                                 }
 
-                            if model.likingEnabled {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Spotify Client ID")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    TextField(
-                                        "Enter Spotify Client ID",
-                                        text: Binding(
-                                            get: { model.spotifyClientID ?? "" },
-                                            set: { newValue in
-                                                let trimmed = newValue.trimmingCharacters(
-                                                    in: .whitespacesAndNewlines
-                                                )
-                                                model.spotifyClientID =
-                                                    trimmed.isEmpty ? nil : trimmed
-                                            }
-                                        )
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Spotify Client ID")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField(
+                                    "Enter Spotify Client ID",
+                                    text: Binding(
+                                        get: { model.spotifyClientID ?? "" },
+                                        set: { newValue in
+                                            let trimmed = newValue.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            )
+                                            model.spotifyClientID =
+                                                trimmed.isEmpty ? nil : trimmed
+                                        }
                                     )
-                                    .textFieldStyle(.roundedBorder)
-                                }
-
-                                HStack {
-                                    if showSpotifyConnectionTestResult {
-                                        HStack(spacing: 6) {
-                                            if isTestingSpotifyConnection {
-                                                ProgressView()
-                                                    .scaleEffect(0.5)
-                                                Text("Testing")
-                                            } else {
-                                                Image(systemName: connectionStatusIcon)
-                                                Text(connectionStatusText)
-                                            }
-                                        }
-                                        .foregroundColor(connectionStatusColor)
-                                        .font(.caption)
-                                    }
-
-                                    Spacer()
-
-                                    Button("Test Connection") {
-                                        testConnection()
-                                    }
-                                    .disabled(isTestingSpotifyConnection)
-
-                                    if !isSpotifyAuthenticated {
-                                        Button("Log In to Spotify") {
-                                            LoginWindowManager.showLoginWindow(with: model)
-                                        }
-                                    }
-                                }
-                                .padding(.top, 8)
+                                )
+                                .textFieldStyle(.roundedBorder)
                             }
+
+                            HStack {
+                                if showSpotifyConnectionTestResult {
+                                    HStack(spacing: 6) {
+                                        if isTestingSpotifyConnection {
+                                            ProgressView()
+                                                .scaleEffect(0.5)
+                                            Text("Testing")
+                                        } else {
+                                            Image(systemName: connectionStatusIcon)
+                                            Text(connectionStatusText)
+                                        }
+                                    }
+                                    .foregroundColor(connectionStatusColor)
+                                    .font(.caption)
+                                }
+
+                                Spacer()
+
+                                Button("Test Connection") {
+                                    testConnection()
+                                }
+                                .disabled(isTestingSpotifyConnection)
+
+                                Button(isSpotifyAuthenticated ? "Reconnect Spotify" : "Connect Spotify") {
+                                    LoginWindowManager.showLoginWindow(with: model)
+                                }
+                            }
+                            .padding(.top, 8)
                         } header: {
                             Text("Spotify Integration")
                         } footer: {
-                            Text("Enable liking tracks requires a Spotify Client ID. You can create one at developer.spotify.com.")
+                            Text("Connect Spotify for Up Next. Turn on Track Liking if you also want to grant library access.")
                         }
                     }
                     .formStyle(.grouped)

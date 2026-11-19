@@ -54,7 +54,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.popoverManager.dismiss()
                 LoginWindowManager.showLoginWindow(
-                    with: self.musicPlayerPreferencesModel, includeQueue: true
+                    with: self.musicPlayerPreferencesModel
                 )
             }
         )

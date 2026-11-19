@@ -3,7 +3,6 @@ import SwiftUI
 struct SpotifyLoginView: View {
     @ObservedObject var authManager = SpotifyAuthManager.shared
     @ObservedObject var preferences: MusicPlayerPreferencesModel
-    var includeQueue = false
     @State private var currentStep: Int = -1  // -1 = Intro, 0 = Client ID, 1 = Login
     @State private var instructionStep: Int = 0
 
@@ -148,9 +147,7 @@ struct SpotifyLoginView: View {
     private var introStep: some View {
         VStack(spacing: 20) {
             Text(
-                includeQueue
-                    ? "Connect your Spotify account to see the upcoming tracks and episodes Spotify returns."
-                    : "Connect your Spotify account to like tracks from SpotMenu."
+                "Connect your Spotify account to see upcoming tracks and episodes."
             )
             .font(.body)
             .foregroundColor(.white.opacity(0.8))
@@ -192,10 +189,7 @@ struct SpotifyLoginView: View {
                 .buttonStyle(.plain)
                 .frame(width: 260)
 
-                Button(includeQueue ? "Cancel" : "Turn Off Track Liking") {
-                    if !includeQueue {
-                        preferences.likingEnabled = false
-                    }
+                Button("Cancel") {
                     NSApp.keyWindow?.close()
                 }
                 .foregroundColor(.gray)
@@ -368,12 +362,16 @@ struct SpotifyLoginView: View {
                 }
             } else {
                 Spacer()
-                if includeQueue {
-                    Text("Grant read access to your Spotify queue.")
-                        .foregroundColor(.white.opacity(0.8))
-                }
+                Text(
+                    preferences.likingEnabled
+                        ? "Grant read access to your queue and library access for liking tracks."
+                        : "Grant read access to your Spotify queue."
+                )
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
                 Button(action: {
-                    authManager.startAuthentication(includeQueue: includeQueue)
+                    authManager.startAuthentication(likingEnabled: preferences.likingEnabled)
                 }) {
                     HStack(alignment: .center, spacing: 12) {
                         Image(systemName: "arrow.right.circle.fill")
