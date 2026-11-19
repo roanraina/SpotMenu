@@ -356,9 +356,14 @@ struct SpotifyLoginView: View {
                             .font(.headline)
                     }
 
-                    Text("You can close this window.")
+                    Text(
+                        authManager.connectionIsSessionOnly
+                            ? "Spotify is connected for this session. Keychain couldn't save the connection."
+                            : "You can close this window."
+                    )
                         .foregroundColor(.gray)
                         .font(.subheadline)
+                        .multilineTextAlignment(.center)
                 }
             } else {
                 Spacer()

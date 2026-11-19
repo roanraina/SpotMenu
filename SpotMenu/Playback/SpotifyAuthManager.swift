@@ -17,9 +17,20 @@ class SpotifyAuthManager: ObservableObject {
     private let accessTokenKey = "accessToken"
     private let refreshTokenKey = "refreshToken"
     private let expiryDateKey = "tokenExpiry"
+    private let credentialsKey = "spotifySession"
     private var pendingAuthorization: (state: String, verifier: String)?
+    private let credentialsLock = NSLock()
+    private var sessionCredentials: Credentials?
+
+    private struct Credentials: Codable {
+        let clientID: String
+        let accessToken: String
+        let refreshToken: String
+        let expiresAt: Date
+    }
 
     @Published var didAuthenticate = false
+    @Published private(set) var connectionIsSessionOnly = false
 
     // MARK: - Public Interface
 
@@ -80,15 +91,16 @@ class SpotifyAuthManager: ObservableObject {
         forceRefresh: Bool = false,
         completion: @escaping (String?) -> Void
     ) {
-        guard !forceRefresh, let expiry = loadDate(key: expiryDateKey),
-            expiry > Date(),
-            let token = loadKeychain(key: accessTokenKey)
-        else {
-            refreshAccessToken(completion: completion)
+        guard let clientID, let credentials = credentials(for: clientID) else {
+            completion(nil)
             return
         }
 
-        completion(token)
+        if !forceRefresh, credentials.expiresAt > Date(), !credentials.accessToken.isEmpty {
+            completion(credentials.accessToken)
+        } else {
+            refreshAccessToken(credentials, completion: completion)
+        }
     }
 
     func checkAuthenticationStatus(completion: @escaping (Bool) -> Void) {
@@ -238,34 +250,29 @@ class SpotifyAuthManager: ObservableObject {
                 return
             }
 
-            self.saveKeychain(key: self.accessTokenKey, value: accessToken)
-            self.saveKeychain(key: self.refreshTokenKey, value: refreshToken)
-            self.saveDate(
-                key: self.expiryDateKey,
-                value: Date().addingTimeInterval(expiresIn)
+            let credentials = Credentials(
+                clientID: clientID, accessToken: accessToken, refreshToken: refreshToken,
+                expiresAt: Date().addingTimeInterval(expiresIn)
             )
+            let saved = self.storeCredentials(credentials)
 
             DispatchQueue.main.async {
+                self.connectionIsSessionOnly = !saved
                 self.didAuthenticate = true
             }
         }.resume()
     }
 
-    private func refreshAccessToken(completion: @escaping (String?) -> Void) {
-        guard let refreshToken = loadKeychain(key: refreshTokenKey),
-            let clientID = clientID, !clientID.isEmpty
-        else {
-            completion(nil)
-            return
-        }
-
+    private func refreshAccessToken(
+        _ credentials: Credentials, completion: @escaping (String?) -> Void
+    ) {
         var request = URLRequest(url: URL(string: tokenURL)!)
         request.httpMethod = "POST"
 
         let bodyParams = [
             "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": clientID,
+            "refresh_token": credentials.refreshToken,
+            "client_id": credentials.clientID,
         ]
 
         request.httpBody =
@@ -289,23 +296,15 @@ class SpotifyAuthManager: ObservableObject {
                 return
             }
 
-            self.saveKeychain(key: self.accessTokenKey, value: accessToken)
-
-            if let newRefreshToken = json["refresh_token"] as? String {
-                self.saveKeychain(
-                    key: self.refreshTokenKey,
-                    value: newRefreshToken
-                )
-            }
-
-            if let expiresIn = json["expires_in"] as? Double {
-                self.saveDate(
-                    key: self.expiryDateKey,
-                    value: Date().addingTimeInterval(expiresIn)
-                )
-            }
+            let renewed = Credentials(
+                clientID: credentials.clientID, accessToken: accessToken,
+                refreshToken: json["refresh_token"] as? String ?? credentials.refreshToken,
+                expiresAt: Date().addingTimeInterval(json["expires_in"] as? Double ?? 3600)
+            )
+            let saved = self.storeCredentials(renewed)
 
             DispatchQueue.main.async {
+                self.connectionIsSessionOnly = !saved
                 completion(accessToken)
             }
         }.resume()
@@ -328,60 +327,66 @@ class SpotifyAuthManager: ObservableObject {
 // MARK: - Secure Storage Helpers
 
 extension SpotifyAuthManager {
-    private func saveKeychain(key: String, value: String) {
-        #if DEBUG
-            UserDefaults.standard.set(value, forKey: "dev.\(key)")
-        #else
-            let data = Data(value.utf8)
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: keychainService,
-                kSecAttrAccount as String: key,
-            ]
-            let attributes: [String: Any] = [
-                kSecValueData as String: data,
-                kSecAttrAccessible as String:
-                    kSecAttrAccessibleAfterFirstUnlock,
-            ]
-            let status = SecItemUpdate(
-                query as CFDictionary, [kSecValueData as String: data] as CFDictionary
+    private func credentials(for clientID: String) -> Credentials? {
+        if let current = credentialsLock.withLock({ sessionCredentials }), current.clientID == clientID {
+            return current
+        }
+
+        let saved: Credentials?
+        if let data = loadKeychain(key: credentialsKey) {
+            saved = try? JSONDecoder().decode(Credentials.self, from: data)
+        } else if let refreshToken = loadKeychain(key: refreshTokenKey) {
+            let accessToken = loadKeychain(key: accessTokenKey)
+                .flatMap { String(data: $0, encoding: .utf8) }
+            saved = Credentials(
+                clientID: clientID, accessToken: accessToken ?? "",
+                refreshToken: String(decoding: refreshToken, as: UTF8.self),
+                expiresAt: loadDate(key: expiryDateKey) ?? .distantPast
             )
-            if status == errSecItemNotFound {
-                SecItemAdd(
-                    query.merging(attributes) { _, new in new } as CFDictionary, nil
-                )
+        } else {
+            saved = nil
+        }
+        guard let saved, saved.clientID == clientID else { return nil }
+
+        return credentialsLock.withLock {
+            if let current = sessionCredentials, current.clientID == clientID {
+                return current
             }
-        #endif
+            sessionCredentials = saved
+            return saved
+        }
     }
 
-    private func loadKeychain(key: String) -> String? {
-        #if DEBUG
-            return UserDefaults.standard.string(forKey: "dev.\(key)")
-        #else
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: keychainService,
-                kSecAttrAccount as String: key,
-                kSecReturnData as String: true,
-                kSecMatchLimit as String: kSecMatchLimitOne,
-            ]
+    private func storeCredentials(_ credentials: Credentials) -> Bool {
+        credentialsLock.withLock { sessionCredentials = credentials }
+        guard let data = try? JSONEncoder().encode(credentials) else { return false }
 
-            var result: AnyObject?
-            let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-            if status == errSecSuccess,
-                let data = result as? Data,
-                let string = String(data: data, encoding: .utf8)
-            {
-                return string
-            } else {
-                return nil
-            }
-        #endif
+        let item = keychainItem(credentialsKey)
+        var entry = item
+        entry[kSecValueData as String] = data
+        let result = SecItemAdd(entry as CFDictionary, nil)
+        if result == errSecDuplicateItem {
+            let update = [kSecValueData as String: data] as CFDictionary
+            return SecItemUpdate(item as CFDictionary, update) == errSecSuccess
+        }
+        return result == errSecSuccess
     }
 
-    private func saveDate(key: String, value: Date) {
-        UserDefaults.standard.set(value, forKey: key)
+    private func keychainItem(_ key: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key,
+        ]
+    }
+
+    private func loadKeychain(key: String) -> Data? {
+        var query = keychainItem(key)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &value)
+        return status == errSecSuccess ? value as? Data : nil
     }
 
     private func loadDate(key: String) -> Date? {
