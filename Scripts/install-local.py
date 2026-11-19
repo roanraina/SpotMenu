@@ -38,6 +38,36 @@ def git_revision():
     return f'{revision}-dirty' if status else revision
 
 
+def signing_identity():
+    configured = subprocess.run(
+        ['git', '-C', ROOT, 'config', '--local', '--get', 'spotmenu.signingIdentity'],
+        text=True, capture_output=True,
+    )
+    if configured.returncode == 1:
+        return '-'
+    configured.check_returncode()
+    identity = configured.stdout.strip()
+    if not re.fullmatch(r'[0-9a-fA-F]{40}', identity):
+        raise SystemExit('spotmenu.signingIdentity must be a certificate fingerprint.')
+    return identity
+
+
+def signing_requirement(identity):
+    return f'identifier "{BUNDLE_ID}" and certificate leaf = H"{identity}"'
+
+
+def sign_app(app, stage):
+    entitlements = stage / 'SpotMenu.entitlements'
+    values = (ROOT / 'SpotMenu/SpotMenu.entitlements').read_text()
+    entitlements.write_text(values.replace('$(PRODUCT_BUNDLE_IDENTIFIER)', BUNDLE_ID))
+    identity = signing_identity()
+    flags = [] if identity == '-' else [
+        f'-r=designated => {signing_requirement(identity)}',
+    ]
+    run('codesign', '--force', '--timestamp=none', '--sign', identity,
+        '--entitlements', entitlements, *flags, app)
+
+
 def copy_swift(source, destination):
     destination.mkdir()
     for path in sorted(source.rglob('*.swift')):
@@ -108,10 +138,6 @@ extension Bundle {
         plistlib.dump(metadata, file)
     run('/bin/sh', ROOT / 'Scripts/stamp-git-version.sh', ROOT, app / PLIST)
 
-    entitlements = stage / 'SpotMenu.entitlements'
-    values = (ROOT / 'SpotMenu/SpotMenu.entitlements').read_text()
-    entitlements.write_text(values.replace('$(PRODUCT_BUNDLE_IDENTIFIER)', BUNDLE_ID))
-    run('codesign', '--force', '--sign', '-', '--entitlements', entitlements, app)
     return app
 
 
@@ -121,12 +147,18 @@ def build(stage, cache):
         run('xcodebuild', '-project', ROOT / 'SpotMenu.xcodeproj', '-scheme', 'SpotMenu',
             '-configuration', 'Release', '-derivedDataPath', stage / 'DerivedData',
             'CODE_SIGN_IDENTITY=-', 'CODE_SIGN_STYLE=Manual', 'ENABLE_HARDENED_RUNTIME=NO', 'build')
-        return stage / 'DerivedData/Build/Products/Release' / APP_NAME
-    return build_with_command_line_tools(stage, cache)
+        app = stage / 'DerivedData/Build/Products/Release' / APP_NAME
+    else:
+        app = build_with_command_line_tools(stage, cache)
+    sign_app(app, stage)
+    return app
 
 
 def verify(app):
     run('codesign', '--verify', '--deep', '--strict', app)
+    identity = signing_identity()
+    if identity != '-':
+        run('codesign', '--verify', '--strict', f'-R={signing_requirement(identity)}', app)
     with (app / PLIST).open('rb') as file:
         metadata = plistlib.load(file)
     revision = metadata.get('SpotMenuGitCommit', '')
