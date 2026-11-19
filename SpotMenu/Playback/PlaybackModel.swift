@@ -97,7 +97,6 @@ class PlaybackModel: ObservableObject {
     @Published private(set) var isShuffling: Bool?
     @Published private(set) var isRepeating: Bool?
     @Published private(set) var spotifyTrackURI: String?
-    @Published var isShowingSpotifyQueue = false
 
     private let preferences: MusicPlayerPreferencesModel
     private var controller: MusicPlayerController

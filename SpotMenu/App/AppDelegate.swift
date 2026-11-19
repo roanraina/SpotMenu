@@ -76,9 +76,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     isActive: visible && self.playbackModel.playerType == .spotify,
                     trackURI: self.playbackModel.spotifyTrackURI
                 )
-            },
-            onQueueVisibilityChanged: { [weak self] isVisible in
-                self?.playbackModel.isShowingSpotifyQueue = isVisible
             }
         )
 

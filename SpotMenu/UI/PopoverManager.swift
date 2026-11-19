@@ -7,7 +7,6 @@ class PopoverManager {
     private let window: PopoverWindow
     private let makeQueueWindow: (@escaping (Bool) -> Void) -> PopoverWindow
     private let onPlaybackVisibilityChanged: (Bool) -> Void
-    private let onQueueVisibilityChanged: (Bool) -> Void
     private var queueWindow: PopoverWindow?
     private var queueDismissTimer: Timer?
     private var queueCloseID: UUID?
@@ -17,8 +16,7 @@ class PopoverManager {
     init<Content: View, QueueContent: View>(
         contentView: Content,
         queueContent: @escaping () -> QueueContent,
-        onPlaybackVisibilityChanged: @escaping (Bool) -> Void,
-        onQueueVisibilityChanged: @escaping (Bool) -> Void
+        onPlaybackVisibilityChanged: @escaping (Bool) -> Void
     ) {
         self.window = PopoverWindow(rootView: contentView)
         self.makeQueueWindow = { onHover in
@@ -29,7 +27,6 @@ class PopoverManager {
             )
         }
         self.onPlaybackVisibilityChanged = onPlaybackVisibilityChanged
-        self.onQueueVisibilityChanged = onQueueVisibilityChanged
     }
 
     func toggle(relativeTo button: NSStatusBarButton?, reserveQueueSpace: Bool) {
@@ -108,7 +105,6 @@ class PopoverManager {
             queue.setFrameOrigin(queueHiddenOrigin(queueWidth: queue.frame.width))
             queueWindow = queue
             window.addChildWindow(queue, ordered: .below)
-            onQueueVisibilityChanged(true)
         }
         queueCloseID = nil
         queue.ignoresMouseEvents = false
@@ -143,7 +139,6 @@ class PopoverManager {
             self.queueWindow = nil
             self.window.removeChildWindow(queue)
             queue.orderOut(nil)
-            self.onQueueVisibilityChanged(false)
         }
     }
 

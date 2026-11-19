@@ -22,21 +22,21 @@ struct PlaybackView: View {
         .frame(width: 300, height: 300)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onHover { hovering in
+            // The queue button is removed with the controls on exit.
+            if !hovering {
+                spotifyQueueHover?(false)
+            }
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovering = hovering
             }
         }
     }
 
-    private var showsControls: Bool {
-        isHovering || (showSpotifyQueue != nil && model.isShowingSpotifyQueue)
-    }
-
     @ViewBuilder
     private var content: some View {
-        let blurRadius = showsControls ? preferences.blurIntensity * 10 : 0
+        let blurRadius = isHovering ? preferences.blurIntensity * 10 : 0
         let overlayColor =
-            showsControls
+            isHovering
             ? adaptiveHoverTintColor.opacity(preferences.hoverTintOpacity)
             : nil
 
@@ -76,7 +76,7 @@ struct PlaybackView: View {
             .overlay(overlayColor)
         }
 
-        if showsControls {
+        if isHovering {
             controlsOverlay
                 .frame(width: 300, height: 300)
         }
