@@ -3,12 +3,8 @@ import SwiftUI
 struct MusicPlayerPreferencesView: View {
     @ObservedObject var model: MusicPlayerPreferencesModel
     @ObservedObject var playbackModel: PlaybackModel
-    @ObservedObject var spotifyAuthManager = SpotifyAuthManager.shared
-
-    @State private var isTestingSpotifyConnection = false
-    @State private var spotifyConnectionTestResult: Bool?
-    @State private var showSpotifyConnectionTestResult = false
-    @State private var isSpotifyAuthenticated = false
+    @State private var isTestingQueue = false
+    @State private var queueStatus: String?
 
     var body: some View {
         ScrollView {
@@ -42,11 +38,6 @@ struct MusicPlayerPreferencesView: View {
 
                         Section {
                             Toggle("Enable Track Liking", isOn: $model.likingEnabled)
-                                .onChange(of: model.likingEnabled) { newValue in
-                                    if newValue && !isSpotifyAuthenticated {
-                                        LoginWindowManager.showLoginWindow(with: model)
-                                    }
-                                }
 
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Spotify Client ID")
@@ -69,33 +60,22 @@ struct MusicPlayerPreferencesView: View {
                             }
 
                             HStack {
-                                if showSpotifyConnectionTestResult {
-                                    HStack(spacing: 6) {
-                                        if isTestingSpotifyConnection {
-                                            ProgressView()
-                                                .scaleEffect(0.5)
-                                            Text("Testing")
-                                        } else {
-                                            Image(systemName: connectionStatusIcon)
-                                            Text(connectionStatusText)
-                                        }
-                                    }
-                                    .foregroundColor(connectionStatusColor)
-                                    .font(.caption)
+                                if isTestingQueue {
+                                    ProgressView().controlSize(.small)
                                 }
-
                                 Spacer()
-
-                                Button("Test Connection") {
-                                    testConnection()
-                                }
-                                .disabled(isTestingSpotifyConnection)
-
-                                Button(isSpotifyAuthenticated ? "Reconnect Spotify" : "Connect Spotify") {
+                                Button("Test Queue", action: testQueue)
+                                    .disabled(isTestingQueue)
+                                Button("Connect / Reconnect Spotify") {
                                     LoginWindowManager.showLoginWindow(with: model)
                                 }
                             }
-                            .padding(.top, 8)
+                            if let queueStatus {
+                                Text(queueStatus)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
                         } header: {
                             Text("Spotify Integration")
                         } footer: {
@@ -106,74 +86,24 @@ struct MusicPlayerPreferencesView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-        .frame(maxWidth: 600)
-        .padding(20)
+            .frame(maxWidth: 600)
+            .padding(20)
+        }
     }
-        .onAppear {
-            SpotifyAuthManager.shared.checkAuthenticationStatus { isAuthed in
-                DispatchQueue.main.async {
-                    isSpotifyAuthenticated = isAuthed
-                    spotifyConnectionTestResult = isAuthed
-                    showSpotifyConnectionTestResult = true
-                }
+
+    @MainActor private func testQueue() {
+        isTestingQueue = true
+        queueStatus = nil
+        Task {
+            defer { isTestingQueue = false }
+            do {
+                let items = try await SpotifyQueue.load()
+                queueStatus = items.isEmpty
+                    ? "Queue access works. Spotify has no upcoming tracks or episodes."
+                    : "Queue access works. Spotify returned \(items.count) upcoming items."
+            } catch {
+                queueStatus = error.localizedDescription
             }
-        }
-        .onChange(of: spotifyAuthManager.didAuthenticate) { newValue in
-            if newValue {
-                isSpotifyAuthenticated = true
-                spotifyConnectionTestResult = true
-                showSpotifyConnectionTestResult = true
-            }
-        }
-    }
-
-    private func testConnection() {
-        isTestingSpotifyConnection = true
-        spotifyConnectionTestResult = nil
-        showSpotifyConnectionTestResult = true
-        let start = Date()
-
-        SpotifyAuthManager.shared.getAccessToken { token in
-            let elapsed = Date().timeIntervalSince(start)
-            let delay = max(0.5 - elapsed, 0)
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                let isAuthed = token != nil
-                self.spotifyConnectionTestResult = isAuthed
-                self.isSpotifyAuthenticated = isAuthed
-                self.isTestingSpotifyConnection = false
-            }
-        }
-    }
-
-    private var connectionStatusText: String {
-        if isTestingSpotifyConnection {
-            return "Testing"
-        } else if let result = spotifyConnectionTestResult {
-            return result ? "Connected" : "Not Connected"
-        } else {
-            return "Unknown"
-        }
-    }
-
-    private var connectionStatusIcon: String {
-        if isTestingSpotifyConnection {
-            return "hourglass"
-        } else if let result = spotifyConnectionTestResult {
-            return result ? "checkmark.circle.fill" : "xmark.circle.fill"
-        } else {
-            return "questionmark.circle"
-        }
-    }
-
-    private var connectionStatusColor: Color {
-        if isTestingSpotifyConnection {
-            return .gray
-        }
-        if let result = spotifyConnectionTestResult {
-            return result ? .green : .red
-        } else {
-            return .gray
         }
     }
 }

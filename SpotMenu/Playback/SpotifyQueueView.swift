@@ -11,7 +11,7 @@ struct SpotifyQueueView: View {
     private enum LoadState {
         case loading
         case loaded([SpotifyQueue.Item])
-        case failed(SpotifyQueue.LoadError)
+        case failed(SpotifyQueue.LoadError?, message: String)
     }
 
     private struct Refresh: Equatable {
@@ -90,17 +90,12 @@ struct SpotifyQueueView: View {
                 }
                 .padding(.vertical, 4)
             }
-        case .failed(.signInRequired):
-            message("Connect Spotify to see your queue.", button: "Connect Spotify")
-        case .failed(.accessDenied):
-            message(
-                "Spotify denied queue access. Reconnect to grant permission.",
-                button: "Reconnect Spotify"
-            )
-        case .failed(.rateLimited):
-            message("Spotify is limiting requests. Try refreshing in a moment.")
-        case .failed(.unavailable):
-            message("Couldn't load the queue. Try refreshing.")
+        case .failed(.signInRequired, let detail):
+            message(detail, button: "Connect Spotify")
+        case .failed(.insufficientScope, let detail):
+            message(detail, button: "Reconnect Spotify")
+        case .failed(_, let detail):
+            message(detail)
         }
     }
 
@@ -125,7 +120,7 @@ struct SpotifyQueueView: View {
             state = .loaded(items)
         } catch {
             guard !Task.isCancelled else { return }
-            state = .failed(error as? SpotifyQueue.LoadError ?? .unavailable)
+            state = .failed(error as? SpotifyQueue.LoadError, message: error.localizedDescription)
         }
     }
 }
